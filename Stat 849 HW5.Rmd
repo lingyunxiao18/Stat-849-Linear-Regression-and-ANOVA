@@ -1,0 +1,165 @@
+---
+title: "Stat 849 HW5"
+author: "Lingyun Xiao"
+date: '2022-11-30'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+solution <- read.csv("~/Library/CloudStorage/OneDrive-UW-Madison/Stat 849/solution.txt", sep="")
+patient <- read.csv("~/Library/CloudStorage/OneDrive-UW-Madison/Stat 849/patient.txt", sep="")
+```
+
+## Stat 849 HW 5
+
+### Q1
+
+#### (a)
+
+Population: The concentration of solution over time.
+
+Sample: The 15 identical solutions.
+
+A cause-and-effect relationship can naturally be established because we expect the concentration of the solution to decrease over time.
+
+#### (b)
+
+```{r}
+lmod1 <- lm(conc ~ hour, data = solution)
+summary(lmod1)
+```
+
+```{r}
+plot(x = solution$hour, y = solution$conc,
+     main = "Concentration vs Time", xlab = "Time", ylab = "Concentration")
+abline(lmod1)
+```
+
+We can specify the simple linear regression model as follows: $\hat{Y} = \hat{\beta_0} + \hat{\beta_1} X$.
+
+#### (c)
+
+```{r}
+lmod_null = lm(conc ~ 1, data = solution)
+anova(lmod_null, lmod1)
+```
+
+We have $H_0: \beta_1 = 0$ and $H_1: \beta_1 \neq 0$. Based on the one-way ANOVA F-test, we reject $H_0$ and conclude that $\beta_1 \neq 0$.
+
+We must make the following assumptions: Normality/Constant variance/Independence of errors; Correct model structure (linear); No unusual observations (outliers, leverages, influential points).
+
+#### (d)
+
+```{r}
+plot(lmod1, which = c(1,2,4,5), cook.levels = 1)
+```
+
+We can observe the following abnormalities:
+
+(a) Quadratic residuals vs fitted values. It violates that the assumption of a linear model.
+
+(b) Short-tailed standardized residuals on normal Q-Q plot. It suggests that the errors are not normally distributed.
+
+(c) Observation 2, 13, 15 have very high Cook's Distance, which suggests they are influential points.
+
+Potential remedies: Transform the predictors and response.
+
+#### (e)
+
+I would suggest a Box-Cox transformation. First, all the observations are strictly positive. Also, I observe a nonlinear relationship between the predictors and the response.
+
+#### (f)
+
+```{r}
+require(MASS)
+boxcox(lmod1, lambda=seq(-0.25,0.75,by=0.05),plotit=T)
+lambda_opt <- 0.04
+trans_conc <- (solution$conc^(lambda_opt)-1)/(lambda_opt)
+lmod2 <- lm(trans_conc ~ solution$hour)
+```
+
+```{r}
+summary(lmod2)
+```
+
+```{r}
+plot(x = solution$hour, y = trans_conc,
+     main = "Trans_Concentration vs Time", xlab = "Time", ylab = "Trans_Concentration")
+abline(lmod2)
+```
+
+#### (g)
+
+It is clear that the $R^2$ value has significant improvement, and our transformed model satisfies the linearity assumption of the underlying model. Also, the residual errors have significant decrease.
+
+### Q2
+
+#### (a)
+
+```{r}
+lmod3 <- lm(y ~ x2, data = patient)
+confint(lmod3)
+```
+
+We run a $t$-test to check whether the single coefficient $\beta_2 = 0$. We can see that the confidence interval lies below 0, so we reject $H_0: \beta_2 = 0$.
+
+#### (b)
+
+```{r}
+lmod3_full <- lm(y ~ ., data = patient)
+x = model.matrix(lmod3_full)[,-1]
+library(faraway)
+vif(x)
+```
+
+We can see that the VIF for all three coefficients are relatively low, so there is little evidence that the model suffers from multicollinearity issue.
+
+#### (c)
+
+```{r}
+lmod4 <- lm(y ~ x1 + x3, data = patient)
+anova(lmod4, lmod3_full)
+```
+
+We remove $X_2$ in the multiple linear regression and do a one-way ANOVA F-test. We conclude that we cannot reject $H_0: \beta_2 = 0$.
+
+#### Q4
+
+First, we generate data according to the true generative model.
+
+```{r}
+set.seed(123)
+N = 50
+x1 = rnorm(N, 0, 1)
+x2 = rnorm(N, 0, 1)
+x = cbind(1, x1, x2)
+x = data.frame(x)
+beta = matrix(c(6.33, -0.024, 0.15), ncol = 3) 
+epsilon = rnorm(N, 0, 0.34^2)
+Y = beta %*% t(x) + epsilon
+testdata = x
+testdata$Y = t(Y)
+
+lmod5 = lm(Y ~ x1 + x2, data = testdata)
+summary(lmod5)
+```
+
+Then, we introduce an outlier.
+
+```{r}
+p1 <- c(1, 0.5, 0.5, 20)
+lmod6 <- lm(Y ~ x1 + x2, rbind(testdata, p1))
+summary(lmod6)
+```
+
+```{r}
+plot(lmod6, which = c(1,2,4,5), cook.levels = 1)
+```
+
+It is evident that the newly introduced outlier, point 51, significantly changes the fit. The coefficient $\beta_1$ becomes positive, and the t-value of both coefficients become much lower. Also, the $R^2$ value dramatically decreases to almost 0. From the plots, we can clearly see that point 51 has very high residuals vs fitted values, and it lies well above the normal Q-Q line. Point 51 also has a Cook's distance of nearly 0.5, suggesting that the outlier is also an influential point.

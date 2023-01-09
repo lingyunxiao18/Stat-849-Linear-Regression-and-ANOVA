@@ -1,0 +1,332 @@
+---
+title: "Stat 849 HW6"
+author: "Lingyun Xiao"
+date: '2022-12-15'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Q1
+
+#### (a)
+
+We have a one-way ANOVA: $Y_{ij} = \mu_i + \epsilon_{ij}$ for $i = 1,\dots,3$ and $j = 1,\dots,4$. The global null hypothesis is $H_0: \mu_1 = \mu_2 = \mu_3$.
+
+#### (b)
+
+$\bar{Y}_{..} = ((30+32+27+35)+(27+29+28+36)+(16+41+22+31))/12 = 29.5$
+
+$\bar{Y}_{1.} = (30+32+27+35)/4 = 31$
+
+$\bar{Y}_{2.} = (27+29+28+36)/4 = 30$
+
+$\bar{Y}_{3.} = (16+41+22+31)/4 = 27.5$
+
+$SS_{Between} = \sum_{i=1}^3 4* (\bar{Y}_{i.}-\bar{Y}_{..})^2 = 4 * ((31-29.5)^2+(30-29.5)^2+(27.5-29.5)^2) = 26$
+
+$df_{Between} = 3-1 =2$
+
+$MS_{Between} = 26/2 = 13$
+
+$SS_{Within} = \sum_{i=1}^3 \sum_{j=1}^4 (Y_{ij}-\bar{Y}_{i.})^2 = 34+50+357 = 441$
+
+$df_{Within} = 12-3 = 9$
+
+$MS_{Within} = 441/9 = 49$
+
+#### (c)
+
+$F_{stat} = \frac{MS_{Between}}{MS_{Within}} = 0.2653$
+
+```{r}
+p_value = pf(0.2653, 2, 9, lower.tail = FALSE)
+p_value
+```
+
+#### (d)
+
+Under the global null hypothesis $H_0$, $F_{stat}$ follows $F_{2, 9}$ distribution. The associated $p$-value $0.7728 > 0.05$, which suggests that we cannot reject $H_0$ under significant level $\alpha = 0.05$.
+
+### Q2
+
+#### (a)
+
+We first generate data according to the underlying model:
+
+```{r}
+set.seed(567)
+X = rnorm(100)
+epsilon = rnorm(100)
+Y = 3 + 2*X -3*X^2 + 0.3*X^3 + epsilon
+
+df = data.frame(x=X, y=Y)
+```
+
+#### (b)
+
+We then perform the exhaustive search for model selection and compare their Adjusted $R^2$, $C_p$ and $BIC$.
+
+```{r}
+library(leaps)
+lmod1 <- regsubsets(y ~ I(X) + I(X^2)+ I(X^3) + I(X^4) + I(X^5) + I(X^6) + I(X^7) 
+                    + I(X^8) + I(X^9) + I(X^10), data=df, nvmax=10, method="exhaustive")
+rs <- summary(lmod1)
+par(mfrow=c(1,3))
+plot(2:11, rs$adjr2, xlab="No. of Parameters", ylab="Adjusted R-square")
+plot(2:11, rs$cp, xlab="No. of Parameters", ylab="Cp Statistic")
+plot(2:11, rs$bic, xlab="No. of Parameters", ylab="BIC")
+```
+
+We would like to select the model with the highest adjusted $R^2$, lowest $C_p$ and lowest $BIC$. All three plots suggest that we would select the model with three parameters.
+
+```{r}
+rs$which
+```
+
+Therefore, based on the best subset selection, we will choose $X, X^2, X^3$ as the parameters. The regression coefficients are reported below. Notice that all three coefficients are very close to the underlying true linear model.
+
+```{r}
+lmod2 <- lm(y ~ I(X) + I(X^2) + I(X^3), data = df)
+summary(lmod2)
+```
+
+#### (c)
+
+If we instead use forward stepwise selection, we would have the same results from above for BIC, but we would choose 5 predictors w.r.t. adjusted $R^2$ and $C_p$.
+
+```{r}
+lmod3 <- regsubsets(y ~ I(X) + I(X^2)+ I(X^3) + I(X^4) + I(X^5) + I(X^6) + I(X^7) 
+                    + I(X^8) + I(X^9) + I(X^10), data=df, nvmax=10, method="forward")
+rs2 <- summary(lmod3)
+par(mfrow=c(1,3))
+plot(2:11, rs2$adjr2, xlab="No. of Parameters", ylab="Adjusted R-square")
+plot(2:11,rs2$cp,xlab="No. of Parameters",ylab="Cp Statistic")
+plot(2:11,rs2$bic,xlab="No. of Parameters",ylab="BIC")
+rs2$which
+```
+```{r}
+which.max(rs2$adjr2) 
+which.min(rs2$cp)
+which.min(rs2$bic)
+```
+
+```{r}
+lmod4 <- lm(y ~ I(X) + I(X^2) + I(X^3) + I(X^5) + I(X^7), data = df)
+summary(lmod4)
+```
+
+If we instead use backward stepwise selection, we would obtain the same results as forward selection.
+
+```{r}
+lmod5 <- regsubsets(y ~ I(X) + I(X^2)+ I(X^3) + I(X^4) + I(X^5) + I(X^6) + I(X^7) + I(X^8) + I(X^9) + I(X^10), data=df, nvmax=10, method="backward")
+rs3 <- summary(lmod5)
+par(mfrow=c(1,3))
+plot(2:11, rs3$adjr2, xlab="No. of Parameters", ylab="Adjusted R-square")
+plot(2:11, rs3$cp,xlab="No. of Parameters",ylab="Cp Statistic")
+plot(2:11, rs3$bic,xlab="No. of Parameters",ylab="BIC")
+rs3$which 
+```
+
+```{r}
+which.max(rs3$adjr2) 
+which.min(rs3$cp)
+which.min(rs3$bic)
+```
+
+#### (e)
+
+We fit the LASSO regression as follows:
+
+```{r}
+library(glmnet)
+X <- model.matrix(y ~ I(x) + I(x^2) + I(x^3) + I(x^4) + I(x^5) + I(x^6) + I(x^7) 
+                  + I(x^8) + I(x^9) + I(x^10), data=df)[, -1]
+Y <- df$y
+set.seed(456)
+lasso.mod <- glmnet(X,Y,alpha=1)
+plot(lasso.mod)
+```
+
+```{r}
+cv.out <- cv.glmnet(X, Y, alpha=1) 
+plot(cv.out)
+```
+
+```{r}
+lambda_opt <- cv.out$lambda.min
+lambda_opt
+```
+
+From the results above, we see that the optimal $\lambda$ is 0.0391. Next, we refit the model using the selected $\lambda$.
+
+```{r}
+predict(cv.out, s = lambda_opt, type = "coefficients")[1:11, ]
+```
+
+The model selects $X^1, X^2, X^3$ and zero out all the remaining parameters, which agrees to the true model.
+
+#### (e)
+
+Modify the underlying model and repeat all the steps above.
+
+For best subset selection:
+
+```{r}
+set.seed(20)
+X <- rnorm(100)
+epsilon <- rnorm(100)
+Y <- 3 + 2*X^7 + epsilon
+
+df = data.frame(x=X, y=Y)
+```
+
+```{r}
+lmod7 <- regsubsets(y ~ I(X) + I(X^2)+ I(X^3) + I(X^4) + I(X^5) + I(X^6) + I(X^7) 
+                    + I(X^8) + I(X^9) + I(X^10), data=df, nvmax=10, method="exhaustive")
+rs4 <- summary(lmod7)
+par(mfrow=c(1,3))
+plot(2:11, rs4$adjr2, xlab="No. of Parameters", ylab="Adjusted R-square")
+plot(2:11, rs4$cp, xlab="No. of Parameters", ylab="Cp Statistic")
+plot(2:11, rs4$bic, xlab="No. of Parameters", ylab="BIC")
+
+rs4$which
+```
+Adjusted $R^2$ and $BIC$ suggest that we would only choose one predictor $X^7$, while $C_p$ suggests that we choose three predictors $X^2, X^7, X^8$.
+
+```{r}
+lmod8 <- lm(y~I(X^7), data = df)
+summary(lmod8)
+```
+
+```{r}
+lmod9 <- lm(y~I(X^2)+I(X^7)+I(X^8), data = df)
+summary(lmod9)
+```
+
+For LASSO:
+
+```{r}
+X <- model.matrix(y ~ x + I(x^2) + I(x^3) + I(x^4) + I(x^5) + I(x^6) + I(x^7) + I(x^8) + I(x^9) + I(x^10), data=df)[, -1]
+Y <- df$y
+
+set.seed(34)
+cv.out <- cv.glmnet(X,Y,alpha=1)
+plot(cv.out)
+```
+
+```{r}
+lambda_opt <- cv.out$lambda.min
+lambda_opt
+```
+
+From the results above, we see that the optimal $\lambda$ is 10.454. Next, we refit the model using the selected $\lambda$.
+
+```{r}
+predict(cv.out, s = lambda_opt, type = "coefficients")[1:11, ]
+```
+
+The result suggests that we would opnly choose $X^7$ and zero out all the other predictors. Overall, it can be shown that LASSO regression can zero out many predictors, which would be generally desired. 
+
+### Q3
+
+#### (a)
+
+We generate the required data as follows:
+
+```{r}
+set.seed(200)
+p = 20
+n = 1000
+X = matrix(rnorm(p * n), ncol = p, nrow = n)
+beta = rnorm(p, sd = 5)
+beta[c(3, 4, 9, 10, 19)] = 0
+epsilon = rnorm(n)
+Y = X %*% beta + epsilon
+```
+
+#### (b)
+
+```{r}
+n_training = 100
+train <-  sample(seq(n), n_training, replace = FALSE)
+X.train <-  X[train,]
+X.test <-  X[-train,]
+Y.train <-  Y[train,]
+Y.test <-  Y[-train,]
+df.train = data.frame(y = Y.train, x = X.train)
+df.test  = data.frame(y = Y.test,  x = X.test)
+```
+
+#### (c)
+
+```{r}
+fit <- regsubsets(y~., data = df.train, nvmax = p)
+training = model.matrix(y~ ., data = df.train, nvmax = p)
+MSE <- rep(NA, p)
+colname = colnames(df.train)
+for (i in 1:p) {
+    coefficient = coef(fit, id = i)
+    pred = training[, names(coefficient)] %*% coefficient
+    MSE[i] = mean((df.train$y - pred)^2)
+}
+plot(MSE)
+```
+
+#### (d)
+
+```{r}
+fit <- regsubsets(y~., data = df.train, nvmax = p)
+testing = model.matrix(y~ ., data = df.test, nvmax = p)
+MSE_test <- rep(NA, p)
+colname = colnames(df.test)
+for (i in 1:p) {
+    coefficient = coef(fit, id = i)
+    pred = testing[, names(coefficient)] %*% coefficient
+    MSE_test[i] = mean((df.test$y - pred)^2)
+}
+plot(MSE_test)
+```
+
+#### (e)
+
+```{r}
+which.min(MSE_test)
+```
+
+The performance highly depends on the random seed we select. In this case, the MSE on the testing data takes minimum when there are only 14 predictors.
+
+#### (f)
+
+```{r}
+coef(fit, id =14)
+```
+
+```{r}
+beta
+```
+
+Notice that the model that minimizes MSE omits $X^3, X^4, X^8, X^9, X^{10}, X^{19}$. This result is very similar to the underlying true model and only omits one more coefficient.
+
+#### (g)
+
+```{r}
+errors = rep(NA, p)
+colname <- colname[-c(1)]
+for (i in 1:p) {
+    coefficient = coef(fit, id = i)
+    errors[i] = sqrt(sum((beta[colname %in% names(coefficient)] - coefficient[names(coefficient) %in% colname])^2)
+          + sum(beta[!(colname %in% names(coefficient))])^2)
+}
+plot(errors)
+```
+
+```{r}
+which.min(errors)
+```
+
+We can observe that the model that minimizes errors defined in (g) also uses 14 predictors, which agrees with the previous result. However, if we alter the random seed, we can observe that these two models do not have to be the same!
